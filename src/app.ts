@@ -5,7 +5,6 @@ import { JSONSchema } from 'openai/lib/jsonschema';
 require('dotenv').config();
 
 
-
 // Create Express server
 const app = express();
 const port = 3000; 
@@ -33,37 +32,147 @@ app.get('/', (req, res) => {
 })
 
 
-app.post('/promptToMug', async (req, res) => {
-
-  const mugPreview = await promptToMug(req.body.prompt);
-  res.send(mugPreview.images.map((img: any) => img.src));
-})
-
-app.post('/promptToPuzzle', async (req, res) => {
-
-  const puzzlePreview = await promptToPuzzle(req.body.prompt);
-  res.send(puzzlePreview.images.map((img: any) => img.src));
-})
-
-
-// Test Dalle create img endpoint 
-app.get('/img', async (req, res) => {
-
+// Generate an image for a given prompt using DALLE
+app.post('/generateImage', async (req, res) => {
   const response = await openai.images.generate({
     model: "dall-e-3",
-    prompt: "a cute cat wearing a hat",
+    prompt: req.body.prompt,
     n: 1,
     size: "1792x1024",
   });
 
  const image_url = response.data;
 
-  res.send(image_url);
+ res.send(image_url);
 })
 
 
+// Upload image to Printify
+app.post('/uploadImage', async (req, res) => {
+
+  const response = await fetch('https://api.printify.com/v1/uploads/images.json', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json;charset=utf-8',
+      'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+    },
+    body: JSON.stringify({
+      "file_name": "image.png",
+      "url": req.body.url
+    })
+  })
+
+  // Print the body of the response
+  res.send(await response.json())
+
+})
+
+
+// Create a mug product on Printify based on an uploaded image
+app.post('/createMug', async (req, res) => {
+  const mugRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json;charset=utf-8',
+      'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+    },
+    body: JSON.stringify({
+      "title": "Product",
+      "description": "Good product",
+      "blueprint_id": 478,
+      "print_provider_id": 28,
+      "variants": [
+            {
+                "id": 65216,
+                "price": 400,
+                "is_enabled": true
+            }],
+      "print_areas": [
+        {
+          "variant_ids": [65216],
+          "placeholders": [
+            {
+              "position": "front",
+              "images": [
+                  {
+                    "id": req.body.image.id,
+                    "name": "imgpng.png",
+                    "type": "image/png",
+                    "height": req.body.image.height,
+                    "width": req.body.image.width,
+                    "x": 0.5,
+                    "y": 0.5,
+                    "scale": 1,
+                    "angle": 0
+                  }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+  }))
+
+
+  // Get mug preview images
+  const mugPreview = await mugRequest.json() 
+  return mugPreview
+})
+
+
+// Create a puzzle product on Printify based on an uploaded image
+app.post('/createPuzzle', async (req, res) => {
+  const puzzleRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json;charset=utf-8',
+      'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+    },
+    body: JSON.stringify({
+      "title": "Product",
+      "description": "Good product",
+      "blueprint_id": 532,
+      "print_provider_id": 59,
+      "variants": [
+            {
+                "id": 68984,
+                "price": 3172,
+                "is_enabled": true
+            }],
+      "print_areas": [
+        {
+          "variant_ids": [68984],
+          "placeholders": [
+            {
+              "position": "front",
+              "images": [
+                  {
+                    "id": req.body.image.id,
+                    "name": "imgpng.png",
+                    "type": "image/png",
+                    "height": req.body.image.height,
+                    "width": req.body.image.width,
+                    "x": 0.5,
+                    "y": 0.5,
+                    "scale": 1,
+                    "angle": 0
+                  }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+  }))
+
+
+  // Get mug preview images
+  const puzzlePreview = await puzzleRequest.json() 
+  return puzzlePreview
+})
+
 // Test Printify endpoint
-app.get('/getShop', async (req, res) => {
+app.get('/getShops', async (req, res) => {
   
   const response = await fetch('https://api.printify.com/v1/shops.json', {
     method: 'GET',
@@ -94,28 +203,7 @@ app.get('/getUploads', async (req, res) => {
 })
 
 
-
-// Upload image to Printify
-app.get('/uploadImage', async (req, res) => {
-
-  const response = await fetch('https://api.printify.com/v1/uploads/images.json', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json;charset=utf-8',
-      'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
-    },
-    body: JSON.stringify({
-      "file_name": "image.png",
-      "url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-s6tZ6QQiqYLslwwXi6GulO9F/user-H0svZz3k8o7q4wKl6lMn5n2x/img-OAPjFSloOjLjxaatZZmizyOR.png?st=2024-04-06T15%3A54%3A24Z&se=2024-04-06T17%3A54%3A24Z&sp=r&sv=2021-08-06&sr=b&rscd=inline&rsct=image/png&skoid=6aaadede-4fb3-4698-a8f6-684d7786b067&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2024-04-05T23%3A45%3A40Z&ske=2024-04-06T23%3A45%3A40Z&sks=b&skv=2021-08-06&sig=OUQ9PhMD7A77/uY0g%2BvN5%2B37QDaFnW2sTclrnOkb04g%3D"
-    })
-  })
-
-  // Print the body of the response
-  res.send(await response.json())
-
-})
-
-// Get Printify products
+// Test Printify products endpoint
 app.get('/getProducts', async (req, res) => {
 
   const response = await fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
@@ -132,61 +220,21 @@ app.get('/getProducts', async (req, res) => {
 })
 
 
-// Create a product on Printify
-app.get('/createMug', async (req, res) => {
-  
-  const response = await (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json;charset=utf-8',
-      'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
-    },
-    body: JSON.stringify({
-      "title": "Product",
-      "description": "Good product",
-      "blueprint_id": 478,
-      "print_provider_id": 28,
-      "variants": [
-            {
-                "id": 65216,
-                "price": 400,
-                "is_enabled": true
-            }],
-      "print_areas": [
-        {
-          "variant_ids": [65216],
-          "placeholders": [
-            {
-              "position": "front",
-              "images": [
-                  {
-                    "id": "66118010d81d1747e4c0fbf9",
-                    "name": "imgpng.png",
-                    "type": "image/png",
-                    "height": 1792,
-                    "width": 1024,
-                    "x": 0.49565896470329024,
-                    "y": 0.5232559581916211,
-                    "scale": 1,
-                    "angle": 0
-                  }
-              ]
-            }
-          ]
-        }
-      ]
-    })
-  }))
 
 
-  // Print the body of the response
-  res.send(await response.json())
 
+/** Obsolete
+// Returns mug preview images for a given prompt
+app.post('/promptToMug', async (req, res) => {
+  const mugPreview = await promptToMug(req.body.prompt);
+  res.send(mugPreview.images.map((img: any) => img.src));
 })
 
-
-
-
+// Returns puzzle preview images for a given prompt
+app.post('/promptToPuzzle', async (req, res) => {
+  const puzzlePreview = await promptToPuzzle(req.body.prompt);
+  res.send(puzzlePreview.images.map((img: any) => img.src));
+})
 
 
 const promptToMug = async (prompt: any) => {
@@ -272,10 +320,6 @@ const mugRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_
 }
 
 
-
-
-
-
 const promptToPuzzle = async (prompt: any) => {
 
   // Generate an image based on the prompt provided
@@ -357,9 +401,7 @@ const puzzleRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTI
   const puzzlePreview = await puzzleRequest.json() 
   return puzzlePreview
 }
-
-
-
+*/
 
 
 
