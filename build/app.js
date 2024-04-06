@@ -16,6 +16,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const openai_1 = __importDefault(require("openai"));
 require('dotenv').config();
+var bodyParser = require('body-parser');
 // Create Express server
 const app = (0, express_1.default)();
 const port = 3000;
@@ -26,6 +27,7 @@ const openai = new openai_1.default({
 const PRINTIFY_SHOP_ID = "15300573";
 // Express configuration
 app.use((0, cors_1.default)()); // Enable CORS
+app.use(bodyParser.json());
 // Start server
 app.listen(port, () => {
     console.log(`Server started at http://localhost:${port}`);
@@ -34,8 +36,8 @@ app.listen(port, () => {
 app.get('/', (req, res) => {
     res.send('Hello world');
 });
-app.get('/test', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const mugPreview = yield promptToMug('two bros hacking away feverishly on a couch');
+app.post('/promptToMug', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const mugPreview = yield promptToMug(req.body.prompt);
     res.send(mugPreview.images.map((img) => img.src));
 }));
 // Test Dalle create img endpoint 

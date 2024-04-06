@@ -5,6 +5,7 @@ import { JSONSchema } from 'openai/lib/jsonschema';
 require('dotenv').config();
 
 
+
 // Create Express server
 const app = express();
 const port = 3000; 
@@ -17,6 +18,9 @@ const PRINTIFY_SHOP_ID = "15300573";
 
 // Express configuration
 app.use(cors()); // Enable CORS
+var bodyParser = require('body-parser')
+app.use(bodyParser.json())
+
 
 // Start server
 app.listen(port, () => {
@@ -29,9 +33,9 @@ app.get('/', (req, res) => {
 })
 
 
-app.get('/test', async (req, res) => {
- 
-  const mugPreview = await promptToMug('two bros hacking away feverishly on a couch');
+app.post('/promptToMug', async (req, res) => {
+
+  const mugPreview = await promptToMug(req.body.prompt);
   res.send(mugPreview.images.map((img: any) => img.src));
 })
 
