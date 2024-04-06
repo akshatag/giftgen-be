@@ -118,7 +118,7 @@ app.post('/createMug', bodyParser.json(), async (req, res) => {
 
   // Get mug preview images
   const mugPreview = await mugRequest.json() 
-  return mugPreview
+  res.send(mugPreview)
 })
 
 
@@ -170,7 +170,7 @@ app.post('/createPuzzle', bodyParser.json(), async (req, res) => {
 
   // Get mug preview images
   const puzzlePreview = await puzzleRequest.json() 
-  return puzzlePreview
+  res.send(puzzlePreview)
 })
 
 
