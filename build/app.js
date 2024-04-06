@@ -46,8 +46,8 @@ app.post('/generateImage', bodyParser.json(), (req, res) => __awaiter(void 0, vo
         n: 1,
         size: "1792x1024",
     });
-    const image_url = response.data[0].url;
-    res.send(image_url);
+    const image = response.data;
+    res.send(image);
 }));
 // Upload image to Printify
 app.post('/uploadImage', bodyParser.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -176,7 +176,7 @@ app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) =>
         return res.status(400).send('Webhook error: ${err.message}');
     }
     if (event.type == 'checkout.session.completed') {
-        console.log(event);
+        console.log("client_reference_id: " + event.data.object.client_reference_id);
         res.status(200).end();
     }
 });

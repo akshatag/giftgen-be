@@ -190,9 +190,14 @@ app.post('/webhook', bodyParser.raw({type: 'application/json'}), (req, res) => {
   }
 
   if (event.type == 'checkout.session.completed') {
-    console.log(event)
-    res.status(200).end();
+    console.log("client_reference_id: " + event.data.object.client_reference_id)
+
+    //TODO: process printify order
+
+  
   }
+
+  res.status(200).end();
 })
 
 
