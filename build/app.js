@@ -16,7 +16,6 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const openai_1 = __importDefault(require("openai"));
 require('dotenv').config();
-var bodyParser = require('body-parser');
 // Create Express server
 const app = (0, express_1.default)();
 const port = 3000;
@@ -27,6 +26,7 @@ const openai = new openai_1.default({
 const PRINTIFY_SHOP_ID = "15300573";
 // Express configuration
 app.use((0, cors_1.default)()); // Enable CORS
+var bodyParser = require('body-parser');
 app.use(bodyParser.json());
 // Start server
 app.listen(port, () => {
@@ -39,6 +39,10 @@ app.get('/', (req, res) => {
 app.post('/promptToMug', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const mugPreview = yield promptToMug(req.body.prompt);
     res.send(mugPreview.images.map((img) => img.src));
+}));
+app.post('/promptToPuzzle', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const puzzlePreview = yield promptToPuzzle(req.body.prompt);
+    res.send(puzzlePreview.images.map((img) => img.src));
 }));
 // Test Dalle create img endpoint 
 app.get('/img', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -223,52 +227,77 @@ const promptToMug = (prompt) => __awaiter(void 0, void 0, void 0, function* () {
     const mugPreview = yield mugRequest.json();
     return mugPreview;
 });
+const promptToPuzzle = (prompt) => __awaiter(void 0, void 0, void 0, function* () {
+    // Generate an image based on the prompt provided
+    const dalleRequest = yield openai.images.generate({
+        model: "dall-e-3",
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+    });
+    const imageUrl = dalleRequest.data[0].url;
+    console.log("dalle image url: " + imageUrl);
+    // Upload the image to Printify
+    const imageRequest = yield fetch('https://api.printify.com/v1/uploads/images.json', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json;charset=utf-8',
+            'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+        },
+        body: JSON.stringify({
+            "file_name": "image.png",
+            "url": imageUrl
+        })
+    });
+    const image = yield imageRequest.json();
+    console.log("Printify image url: " + image.preview_url);
+    // Create a mug with the image on Printify
+    const puzzleRequest = yield (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json;charset=utf-8',
+            'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+        },
+        body: JSON.stringify({
+            "title": "Product",
+            "description": "Good product",
+            "blueprint_id": 532,
+            "print_provider_id": 59,
+            "variants": [
+                {
+                    "id": 68984,
+                    "price": 3172,
+                    "is_enabled": true
+                }
+            ],
+            "print_areas": [
+                {
+                    "variant_ids": [68984],
+                    "placeholders": [
+                        {
+                            "position": "front",
+                            "images": [
+                                {
+                                    "id": image.id,
+                                    "name": "imgpng.png",
+                                    "type": "image/png",
+                                    "height": image.height,
+                                    "width": image.width,
+                                    "x": 0.5,
+                                    "y": 0.5,
+                                    "scale": 1,
+                                    "angle": 0
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        })
+    }));
+    // Get mug preview images
+    const puzzlePreview = yield puzzleRequest.json();
+    return puzzlePreview;
+});
 // Export app
 exports.default = app;
-// {
-//   "title": "Product",
-//   "description": "Good product",
-//   "blueprint_id": 384,
-//   "print_provider_id": 1,
-//   "variants": [
-//         {
-//             "id": 45740,
-//             "price": 400,
-//             "is_enabled": true
-//         },
-//         {
-//             "id": 45742,
-//             "price": 400,
-//             "is_enabled": true
-//         },
-//         {
-//             "id": 45744,
-//             "price": 400,
-//             "is_enabled": false
-//         },
-//         {
-//             "id": 45746,
-//             "price": 400,
-//             "is_enabled": false
-//         }
-//     ],
-//     "print_areas": [
-//       {
-//         "variant_ids": [45740,45742,45744,45746],
-//         "placeholders": [
-//           {
-//             "position": "front",
-//             "images": [
-//                 {
-//                   "id": "5d15ca551163cde90d7b2203", 
-//                   "x": 0.5, 
-//                   "y": 0.5, 
-//                   "scale": 1,
-//                   "angle": 0
-//                 }
-//             ]
-//           }
-//         ]
-//       }
-//     ]
-// }
