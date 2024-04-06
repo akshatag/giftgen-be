@@ -11,6 +11,8 @@ const port = 3000;
 const openai = new OpenAI({
   apiKey: process.env['OPENAI_API_KEY']
 })
+const stripe = require('stripe')(process.env['STRIPE_SECRET_KEY']);
+const stripeWebhookSecret = process.env['STRIPE_WH_SECRET']
 
 // Printify constants
 const PRINTIFY_SHOP_ID = "15300573";
@@ -18,7 +20,7 @@ const PRINTIFY_SHOP_ID = "15300573";
 // Express configuration
 app.use(cors()); // Enable CORS
 var bodyParser = require('body-parser')
-app.use(bodyParser.json())
+// app.use(bodyParser.json())
 
 
 // Start server
@@ -33,7 +35,7 @@ app.get('/', (req, res) => {
 
 
 // Generate an image for a given prompt using DALLE
-app.post('/generateImage', async (req, res) => {
+app.post('/generateImage', bodyParser.json(), async (req, res) => {
   const response = await openai.images.generate({
     model: "dall-e-3",
     prompt: req.body.prompt,
@@ -41,14 +43,14 @@ app.post('/generateImage', async (req, res) => {
     size: "1792x1024",
   });
 
- const image_url = response.data;
+ const image_url = response.data[0].url;
 
  res.send(image_url);
 })
 
 
 // Upload image to Printify
-app.post('/uploadImage', async (req, res) => {
+app.post('/uploadImage', bodyParser.json(), async (req, res) => {
 
   const response = await fetch('https://api.printify.com/v1/uploads/images.json', {
     method: 'POST',
@@ -69,7 +71,7 @@ app.post('/uploadImage', async (req, res) => {
 
 
 // Create a mug product on Printify based on an uploaded image
-app.post('/createMug', async (req, res) => {
+app.post('/createMug', bodyParser.json(), async (req, res) => {
   const mugRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
     method: 'POST',
     headers: {
@@ -121,7 +123,7 @@ app.post('/createMug', async (req, res) => {
 
 
 // Create a puzzle product on Printify based on an uploaded image
-app.post('/createPuzzle', async (req, res) => {
+app.post('/createPuzzle', bodyParser.json(), async (req, res) => {
   const puzzleRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
     method: 'POST',
     headers: {
@@ -171,6 +173,29 @@ app.post('/createPuzzle', async (req, res) => {
   return puzzlePreview
 })
 
+
+app.post('/webhook', bodyParser.raw({type: 'application/json'}), (req, res) => {
+  const payload = req.body;
+
+  const sig = req.headers['stripe-signature']
+  const endpointSecret = 'whsec_b164e68e873b8c17b6fa6b632ee195fbce1d0c983e96dc573ac047b98b883eaf'
+
+  let event; 
+
+  try {
+    event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+  } catch (err) {
+    console.log(err)
+    return res.status(400).send('Webhook error: ${err.message}');
+  }
+
+  if (event.type == 'checkout.session.completed') {
+    console.log(event)
+    res.status(200).end();
+  }
+})
+
+
 // Test Printify endpoint
 app.get('/getShops', async (req, res) => {
   
@@ -218,6 +243,10 @@ app.get('/getProducts', async (req, res) => {
   res.send(await response.json())
 
 })
+
+
+
+
 
 
 
@@ -401,6 +430,13 @@ const puzzleRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTI
   const puzzlePreview = await puzzleRequest.json() 
   return puzzlePreview
 }
+
+
+
+PAYMENTS
+https://docs.stripe.com/payments/checkout/fulfill-orders
+
+
 */
 
 

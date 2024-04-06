@@ -22,12 +22,14 @@ const port = 3000;
 const openai = new openai_1.default({
     apiKey: process.env['OPENAI_API_KEY']
 });
+const stripe = require('stripe')(process.env['STRIPE_SECRET_KEY']);
+const stripeWebhookSecret = process.env['STRIPE_WH_SECRET'];
 // Printify constants
 const PRINTIFY_SHOP_ID = "15300573";
 // Express configuration
 app.use((0, cors_1.default)()); // Enable CORS
 var bodyParser = require('body-parser');
-app.use(bodyParser.json());
+// app.use(bodyParser.json())
 // Start server
 app.listen(port, () => {
     console.log(`Server started at http://localhost:${port}`);
@@ -37,18 +39,18 @@ app.get('/', (req, res) => {
     res.send('Hello world');
 });
 // Generate an image for a given prompt using DALLE
-app.post('/generateImage', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.post('/generateImage', bodyParser.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const response = yield openai.images.generate({
         model: "dall-e-3",
         prompt: req.body.prompt,
         n: 1,
         size: "1792x1024",
     });
-    const image_url = response.data;
+    const image_url = response.data[0].url;
     res.send(image_url);
 }));
 // Upload image to Printify
-app.post('/uploadImage', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.post('/uploadImage', bodyParser.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const response = yield fetch('https://api.printify.com/v1/uploads/images.json', {
         method: 'POST',
         headers: {
@@ -64,7 +66,7 @@ app.post('/uploadImage', (req, res) => __awaiter(void 0, void 0, void 0, functio
     res.send(yield response.json());
 }));
 // Create a mug product on Printify based on an uploaded image
-app.post('/createMug', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.post('/createMug', bodyParser.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const mugRequest = yield (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
         method: 'POST',
         headers: {
@@ -113,7 +115,7 @@ app.post('/createMug', (req, res) => __awaiter(void 0, void 0, void 0, function*
     return mugPreview;
 }));
 // Create a puzzle product on Printify based on an uploaded image
-app.post('/createPuzzle', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.post('/createPuzzle', bodyParser.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const puzzleRequest = yield (fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products.json', {
         method: 'POST',
         headers: {
@@ -161,6 +163,23 @@ app.post('/createPuzzle', (req, res) => __awaiter(void 0, void 0, void 0, functi
     const puzzlePreview = yield puzzleRequest.json();
     return puzzlePreview;
 }));
+app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
+    const payload = req.body;
+    const sig = req.headers['stripe-signature'];
+    const endpointSecret = 'whsec_b164e68e873b8c17b6fa6b632ee195fbce1d0c983e96dc573ac047b98b883eaf';
+    let event;
+    try {
+        event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+    }
+    catch (err) {
+        console.log(err);
+        return res.status(400).send('Webhook error: ${err.message}');
+    }
+    if (event.type == 'checkout.session.completed') {
+        console.log(event);
+        res.status(200).end();
+    }
+});
 // Test Printify endpoint
 app.get('/getShops', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const response = yield fetch('https://api.printify.com/v1/shops.json', {
@@ -375,6 +394,13 @@ const puzzleRequest = await (fetch('https://api.printify.com/v1/shops/' + PRINTI
   const puzzlePreview = await puzzleRequest.json()
   return puzzlePreview
 }
+
+
+
+PAYMENTS
+https://docs.stripe.com/payments/checkout/fulfill-orders
+
+
 */
 // Export app
 exports.default = app;
