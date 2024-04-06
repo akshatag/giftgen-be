@@ -43,9 +43,9 @@ app.post('/generateImage', bodyParser.json(), async (req, res) => {
     size: "1792x1024",
   });
 
- const image_url = response.data[0].url;
+ const image = response.data;
 
- res.send(image_url);
+ res.send(image);
 })
 
 
