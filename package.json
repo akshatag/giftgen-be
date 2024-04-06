@@ -23,7 +23,9 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "openai": "^4.33.0",
-    "stripe": "^14.24.0"
+    "stripe": "^14.24.0",
+    "uuid": "^9.0.1",
+    "uuidv4": "^6.2.13"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

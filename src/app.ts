@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import OpenAI from 'openai';
-import { JSONSchema } from 'openai/lib/jsonschema';
+import { uuid } from 'uuidv4';
 require('dotenv').config();
 
 
@@ -174,33 +174,6 @@ app.post('/createPuzzle', bodyParser.json(), async (req, res) => {
 })
 
 
-app.post('/webhook', bodyParser.raw({type: 'application/json'}), (req, res) => {
-  const payload = req.body;
-
-  const sig = req.headers['stripe-signature']
-  const endpointSecret = 'whsec_b164e68e873b8c17b6fa6b632ee195fbce1d0c983e96dc573ac047b98b883eaf'
-
-  let event; 
-
-  try {
-    event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
-  } catch (err) {
-    console.log(err)
-    return res.status(400).send('Webhook error: ${err.message}');
-  }
-
-  if (event.type == 'checkout.session.completed') {
-    console.log("client_reference_id: " + event.data.object.client_reference_id)
-
-    //TODO: process printify order
-
-  
-  }
-
-  res.status(200).end();
-})
-
-
 // Test Printify endpoint
 app.get('/getShops', async (req, res) => {
   
@@ -251,8 +224,108 @@ app.get('/getProducts', async (req, res) => {
 
 
 
+// Gets product details from Printify
+const getProduct = async (productId: any) => {
+  const response = await fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products/' + productId + '.json', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json;charset=utf-8',
+      'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+    }
+  })
+
+  return await response.json()
+} 
 
 
+// Stripe webhook for completed orders
+app.post('/webhook', bodyParser.raw({type: 'application/json'}), async (req, res) => {
+  const payload = req.body;
+
+  const sig = req.headers['stripe-signature']
+  const endpointSecret = 'whsec_b164e68e873b8c17b6fa6b632ee195fbce1d0c983e96dc573ac047b98b883eaf'
+
+  let event; 
+
+  try {
+    event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+  } catch (err) {
+    console.log(err)
+    return res.status(400).send('Webhook error: ${err.message}');
+  }
+
+  if (event.type == 'checkout.session.completed') {
+    try {  
+      const response = await processPrintifyOrder(event)
+      res.send(response);
+    } catch (error) {
+      console.log(error)
+    }
+  }
+})
+
+// Processes Printify Order based on data from Stripe Checkout webhook
+const processPrintifyOrder = async (checkoutEvent: any) => {
+  const productId = checkoutEvent.data.object.client_reference_id;
+  const productInfo = await getProduct(productId)
+  const variantId = productInfo.variants[0].id
+  const customerName = checkoutEvent.data.object.customer_details.name
+  const firstName = customerName.substring(0, customerName.indexOf(' '))
+  const lastName = customerName.substring(customerName.indexOf(' ') + 1)
+  const email = checkoutEvent.data.object.customer_details.email
+  const phone = checkoutEvent.data.object.customer_details.phone ? checkoutEvent.data.object.customer_details.phone : '0574 69 21 90'
+  const country = checkoutEvent.data.object.customer_details.address.country
+  const address1 = checkoutEvent.data.object.customer_details.address.line1
+  const address2 = checkoutEvent.data.object.customer_details.address.line2
+  const city = checkoutEvent.data.object.customer_details.address.city
+  const zip = checkoutEvent.data.object.customer_details.address.postal_code
+
+  const orderDetails = {
+    "external_id": uuid(),
+    "line_items": [
+      {
+        "product_id": productId,
+        "variant_id": variantId,
+        "quantity": 1
+      }
+    ],
+    "shipping_method": 1,
+    "is_printify_express": false,
+    "is_economy_shipping": false,
+    "send_shipping_notification": true,
+    "address_to": {
+      "first_name": firstName,
+      "last_name": lastName,
+      "email": email,
+      "phone": phone,
+      "country": country,
+      "region": "",
+      "address1": address1,
+      "address2": address2,
+      "city": city,
+      "zip": zip
+    }
+  }
+
+  console.log(orderDetails)
+
+  const response = await (fetch ('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/orders.json', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json;charset=utf-8',
+        'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+      }, 
+      body: JSON.stringify(orderDetails)
+  }))
+
+  if(response.status == 200) {
+    return await response.json() 
+  } else { 
+    throw Error("Error creating Printify order")
+    return
+  }
+
+}
 
 
 

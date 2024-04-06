@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const openai_1 = __importDefault(require("openai"));
+const uuidv4_1 = require("uuidv4");
 require('dotenv').config();
 // Create Express server
 const app = (0, express_1.default)();
@@ -112,7 +113,7 @@ app.post('/createMug', bodyParser.json(), (req, res) => __awaiter(void 0, void 0
     }));
     // Get mug preview images
     const mugPreview = yield mugRequest.json();
-    return mugPreview;
+    res.send(mugPreview);
 }));
 // Create a puzzle product on Printify based on an uploaded image
 app.post('/createPuzzle', bodyParser.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -161,25 +162,8 @@ app.post('/createPuzzle', bodyParser.json(), (req, res) => __awaiter(void 0, voi
     }));
     // Get mug preview images
     const puzzlePreview = yield puzzleRequest.json();
-    return puzzlePreview;
+    res.send(puzzlePreview);
 }));
-app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
-    const payload = req.body;
-    const sig = req.headers['stripe-signature'];
-    const endpointSecret = 'whsec_b164e68e873b8c17b6fa6b632ee195fbce1d0c983e96dc573ac047b98b883eaf';
-    let event;
-    try {
-        event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
-    }
-    catch (err) {
-        console.log(err);
-        return res.status(400).send('Webhook error: ${err.message}');
-    }
-    if (event.type == 'checkout.session.completed') {
-        console.log("client_reference_id: " + event.data.object.client_reference_id);
-        res.status(200).end();
-    }
-});
 // Test Printify endpoint
 app.get('/getShops', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const response = yield fetch('https://api.printify.com/v1/shops.json', {
@@ -216,6 +200,97 @@ app.get('/getProducts', (req, res) => __awaiter(void 0, void 0, void 0, function
     // Print the body of the response
     res.send(yield response.json());
 }));
+// Gets product details from Printify
+const getProduct = (productId) => __awaiter(void 0, void 0, void 0, function* () {
+    const response = yield fetch('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/products/' + productId + '.json', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json;charset=utf-8',
+            'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+        }
+    });
+    return yield response.json();
+});
+// Stripe webhook for completed orders
+app.post('/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const payload = req.body;
+    const sig = req.headers['stripe-signature'];
+    const endpointSecret = 'whsec_b164e68e873b8c17b6fa6b632ee195fbce1d0c983e96dc573ac047b98b883eaf';
+    let event;
+    try {
+        event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+    }
+    catch (err) {
+        console.log(err);
+        return res.status(400).send('Webhook error: ${err.message}');
+    }
+    if (event.type == 'checkout.session.completed') {
+        try {
+            const response = yield processPrintifyOrder(event);
+            res.send(response);
+        }
+        catch (error) {
+            console.log(error);
+        }
+    }
+}));
+// Processes Printify Order based on data from Stripe Checkout webhook
+const processPrintifyOrder = (checkoutEvent) => __awaiter(void 0, void 0, void 0, function* () {
+    const productId = checkoutEvent.data.object.client_reference_id;
+    const productInfo = yield getProduct(productId);
+    const variantId = productInfo.variants[0].id;
+    const customerName = checkoutEvent.data.object.customer_details.name;
+    const firstName = customerName.substring(0, customerName.indexOf(' '));
+    const lastName = customerName.substring(customerName.indexOf(' ') + 1);
+    const email = checkoutEvent.data.object.customer_details.email;
+    const phone = checkoutEvent.data.object.customer_details.phone ? checkoutEvent.data.object.customer_details.phone : '0574 69 21 90';
+    const country = checkoutEvent.data.object.customer_details.address.country;
+    const address1 = checkoutEvent.data.object.customer_details.address.line1;
+    const address2 = checkoutEvent.data.object.customer_details.address.line2;
+    const city = checkoutEvent.data.object.customer_details.address.city;
+    const zip = checkoutEvent.data.object.customer_details.address.postal_code;
+    const orderDetails = {
+        "external_id": (0, uuidv4_1.uuid)(),
+        "line_items": [
+            {
+                "product_id": productId,
+                "variant_id": variantId,
+                "quantity": 1
+            }
+        ],
+        "shipping_method": 1,
+        "is_printify_express": false,
+        "is_economy_shipping": false,
+        "send_shipping_notification": true,
+        "address_to": {
+            "first_name": firstName,
+            "last_name": lastName,
+            "email": email,
+            "phone": phone,
+            "country": country,
+            "region": "",
+            "address1": address1,
+            "address2": address2,
+            "city": city,
+            "zip": zip
+        }
+    };
+    console.log(orderDetails);
+    // const response = await (fetch ('https://api.printify.com/v1/shops/' + PRINTIFY_SHOP_ID + '/orders.json', {
+    //     method: 'POST',
+    //     headers: {
+    //       'Content-Type': 'application/json;charset=utf-8',
+    //       'Authorization': 'Bearer ' + process.env['PRINTIFY_API_KEY']
+    //     }, 
+    //     body: JSON.stringify(orderDetails)
+    // }))
+    // if(response.status == 200) {
+    //   return await response.json() 
+    // } else { 
+    //   throw Error("Error creating Printify order")
+    //   return
+    // }
+});
 /** Obsolete
 // Returns mug preview images for a given prompt
 app.post('/promptToMug', async (req, res) => {
